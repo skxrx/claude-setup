@@ -1,0 +1,46 @@
+{
+  "mcpServers": {
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp"]
+    },
+    "crypto-price": {
+      "command": "npx",
+      "args": ["-y", "mcp-crypto-price"]
+    },
+    "cryptodata": {
+      "command": "npx",
+      "args": ["-y", "cryptodata-mcp"]
+    },
+    "phantom": {
+      "command": "npx",
+      "args": ["-y", "@phantom/mcp-server"]
+    },
+    "alchemy": {
+      "command": "npx",
+      "args": ["-y", "@alchemy/mcp-server"],
+      "env": {
+        "ALCHEMY_API_KEY": ""
+      },
+      "disabled": true
+    },
+    "evm": {
+      "command": "npx",
+      "args": ["-y", "kosyak-evm-mcp-server"],
+      "env": {
+        "ETHERSCAN_API_KEY": "",
+        "PROVIDER_URL": ""
+      },
+      "disabled": true
+    },
+    "postgres": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-postgres", "postgresql://readonly_user:password@localhost:5432/dbname"],
+      "disabled": true
+    },
+    "docker": {
+      "command": "npx",
+      "args": ["-y", "docker-mcp"]
+    }
+  }
+}

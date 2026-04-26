@@ -1,0 +1,51 @@
+{
+  "$schema": "https://claude.ai/schemas/hooks.json",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "file=\"$CLAUDE_FILE_PATH\"; case \"$file\" in *.sol) echo '⚠️ Solidity file modified — run /security-audit before deploy' ;; */signing/*|*/keys/*|*/crypto/*|*/seed*) echo '🔴 SECURITY-CRITICAL file modified: '$file' — crypto-security-auditor review required' ;; *.env*|*secret*|*credential*) echo '🚨 SENSITIVE FILE TOUCHED: '$file' — verify no secrets committed' ;; esac",
+            "timeout": 5000
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cmd=\"$CLAUDE_BASH_COMMAND\"; case \"$cmd\" in *'npm publish'*|*'yarn publish'*) echo '⚠️ PUBLISH detected — verify npm audit clean and no secrets in package' ;; *'docker push'*) echo '⚠️ Docker push — verify no secrets baked into image' ;; *'--force'*|*'-f'*) echo '⚠️ Force flag detected — destructive operation, verify intent' ;; esac",
+            "timeout": 5000
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "file=\"$CLAUDE_FILE_PATH\"; case \"$file\" in *.env|*.env.*|*credentials*|*secrets*) echo 'BLOCK: Cannot write to sensitive file '$file' — use Vault or env vars' && exit 1 ;; esac; exit 0",
+            "timeout": 5000
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if command -v osascript &>/dev/null; then osascript -e 'display notification \"'\"$CLAUDE_NOTIFICATION\"'\" with title \"Claude Code\"'; elif command -v notify-send &>/dev/null; then notify-send 'Claude Code' \"$CLAUDE_NOTIFICATION\"; fi",
+            "timeout": 5000
+          }
+        ]
+      }
+    ]
+  }
+}
