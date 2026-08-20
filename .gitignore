@@ -1,2 +1,5 @@
 .DS_Store
 *.bak.*
+harness.env
+__pycache__/
+.venv/

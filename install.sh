@@ -2,70 +2,123 @@
 set -euo pipefail
 
 # Claude Blockchain Dev Framework — Installer
-# Copies agents, commands, settings, and hooks into ~/.claude/
+# Agents/commands are copied into ~/.claude/; hooks are MERGED into
+# ~/.claude/settings.json (the location Claude Code actually reads);
+# MCP servers are registered via `claude mcp add --scope user`.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLAUDE_DIR="$HOME/.claude"
 
 echo "=== Claude Blockchain Dev Framework ==="
-echo "Installing to: $CLAUDE_DIR"
+echo "Installing from: $SCRIPT_DIR"
 echo ""
 
 # --- Agents ---
-echo "[1/5] Installing agents..."
+echo "[1/7] Agents..."
 mkdir -p "$CLAUDE_DIR/agents"
 cp "$SCRIPT_DIR/agents/"*.md "$CLAUDE_DIR/agents/"
-echo "  ✓ $(ls "$SCRIPT_DIR/agents/"*.md | wc -l | tr -d ' ') agents installed"
+echo "  ✓ $(ls "$SCRIPT_DIR/agents/"*.md | wc -l | tr -d ' ') agents"
 
-# --- Commands (slash commands) ---
-echo "[2/5] Installing commands..."
+# --- Commands ---
+echo "[2/7] Commands..."
 mkdir -p "$CLAUDE_DIR/commands"
 cp "$SCRIPT_DIR/commands/"*.md "$CLAUDE_DIR/commands/"
-echo "  ✓ $(ls "$SCRIPT_DIR/commands/"*.md | wc -l | tr -d ' ') commands installed"
+echo "  ✓ $(ls "$SCRIPT_DIR/commands/"*.md | wc -l | tr -d ' ') commands"
 
-# --- Settings (MCP servers) ---
-echo "[3/5] Installing settings..."
+# --- Hooks: script + merge into settings.json (NOT a separate hooks.json) ---
+echo "[3/7] Hooks -> settings.json ..."
+mkdir -p "$CLAUDE_DIR/hooks"
+cp "$SCRIPT_DIR/hooks/"*.sh "$CLAUDE_DIR/hooks/"
+chmod +x "$CLAUDE_DIR/hooks/"*.sh
 if [ -f "$CLAUDE_DIR/settings.json" ]; then
   cp "$CLAUDE_DIR/settings.json" "$CLAUDE_DIR/settings.json.bak.$(date +%s)"
-  echo "  → Existing settings.json backed up"
 fi
-cp "$SCRIPT_DIR/settings/settings.json" "$CLAUDE_DIR/settings.json"
-echo "  ✓ MCP servers configured"
+python3 - "$CLAUDE_DIR/settings.json" "$SCRIPT_DIR/settings/hooks.json" <<'PY'
+import json, os, sys
+sp, hp = sys.argv[1], sys.argv[2]
+settings = {}
+if os.path.exists(sp):
+    with open(sp) as f:
+        settings = json.load(f)
+with open(hp) as f:
+    hooks = json.load(f)
+settings.pop("mcpServers", None)  # dead config from old installer versions
+settings["hooks"] = hooks.get("hooks", hooks)
+with open(sp, "w") as f:
+    json.dump(settings, f, indent=2)
+print("  ✓ hooks merged (other settings preserved)")
+PY
 
-# --- Hooks ---
-echo "[4/5] Installing hooks..."
-if [ -f "$CLAUDE_DIR/hooks.json" ]; then
-  cp "$CLAUDE_DIR/hooks.json" "$CLAUDE_DIR/hooks.json.bak.$(date +%s)"
-  echo "  → Existing hooks.json backed up"
+# --- MCP servers ---
+echo "[4/7] MCP servers..."
+NPM_REG="npm_config_registry=https://registry.npmjs.org/"
+register() {
+  local name="$1"; shift
+  if claude mcp get "$name" >/dev/null 2>&1; then
+    echo "  = $name (already registered, left as-is)"
+  else
+    claude mcp add --scope user "$name" "$@" >/dev/null
+    echo "  + $name"
+  fi
+}
+register harness-memory         -- uv run --directory "$SCRIPT_DIR/mcp/memory" python server.py
+register harness-second-opinion -- uv run --directory "$SCRIPT_DIR/mcp/second-opinion" python server.py
+register context7     -e "$NPM_REG" -- npx -y @upstash/context7-mcp
+register cryptodata   -e "$NPM_REG" -- npx -y cryptodata-mcp
+register phantom      -e "$NPM_REG" -- npx -y @phantom/mcp-server
+register docker       -e "$NPM_REG" -- npx -y docker-mcp
+
+# --- Memory database ---
+echo "[5/7] Memory DB (Postgres + pgvector)..."
+if docker info >/dev/null 2>&1; then
+  docker compose -f "$SCRIPT_DIR/db/docker-compose.yml" up -d --wait >/dev/null 2>&1 \
+    && echo "  ✓ harness-memory-db up on 127.0.0.1:5433" \
+    || echo "  ✗ compose failed — run manually: docker compose -f $SCRIPT_DIR/db/docker-compose.yml up -d"
+else
+  echo "  → Docker daemon not running. Start it, then:"
+  echo "    docker compose -f $SCRIPT_DIR/db/docker-compose.yml up -d"
 fi
-cp "$SCRIPT_DIR/settings/hooks.json" "$CLAUDE_DIR/hooks.json"
-echo "  ✓ Security hooks installed"
 
-# --- Memory directory ---
-echo "[5/5] Setting up memory..."
-mkdir -p "$CLAUDE_DIR/projects"
-echo "  ✓ Memory directories ready"
+# --- Local embedding model prefetch ---
+echo "[6/7] Local embedding model (no API key needed)..."
+if grep -qE '^EMBED_PROVIDER=local' "$SCRIPT_DIR/harness.env" 2>/dev/null || [ ! -f "$SCRIPT_DIR/harness.env" ]; then
+  uv run --directory "$SCRIPT_DIR/mcp/memory" python -c "
+import warnings; warnings.simplefilter('ignore')
+import embeddings; embeddings.embed('warmup')
+print('  \u2713 ' + embeddings.MODEL + ' ready (dim ' + str(embeddings.DIM) + ')')
+" 2>/dev/null || echo "  ! model prefetch failed — it will download on first use"
+else
+  echo "  = non-local EMBED_PROVIDER configured, skipping"
+fi
+
+# --- Config ---
+echo "[7/7] Config..."
+if [ ! -f "$SCRIPT_DIR/harness.env" ]; then
+  cp "$SCRIPT_DIR/env.sample" "$SCRIPT_DIR/harness.env"
+  chmod 600 "$SCRIPT_DIR/harness.env"
+  echo "  → Created harness.env — FILL IN YOUR KEYS: $SCRIPT_DIR/harness.env"
+else
+  echo "  ✓ harness.env exists"
+fi
+
+# --- Global memory protocol (CLAUDE.md) ---
+if ! grep -q "harness-memory-protocol" "$HOME/.claude/CLAUDE.md" 2>/dev/null; then
+  cat "$SCRIPT_DIR/settings/CLAUDE-harness.md" >> "$HOME/.claude/CLAUDE.md"
+  echo "  ✓ memory protocol appended to ~/.claude/CLAUDE.md"
+else
+  echo "  ✓ memory protocol already in ~/.claude/CLAUDE.md"
+fi
 
 echo ""
 echo "=== Installation complete ==="
 echo ""
-echo "What's installed:"
-echo "  Agents:   $(ls "$CLAUDE_DIR/agents/"*.md 2>/dev/null | wc -l | tr -d ' ')"
-echo "  Commands: $(ls "$CLAUDE_DIR/commands/"*.md 2>/dev/null | wc -l | tr -d ' ')"
-echo "  MCP:      context7, crypto-price, cryptodata, phantom, docker"
-echo "  MCP (disabled): alchemy, evm, postgres"
-echo "  Hooks:    security-critical file alerts, secret file protection, desktop notifications"
+echo "New in the harness:"
+echo "  /mem           — semantic memory (save/find/cases/stats)"
+echo "  /cross-review  — external GPT review with adversarial verification"
+echo "  /debate        — structured debate vs external model"
+echo "  /investigate   — on-chain fund tracing with persistent case memory"
 echo ""
-echo "Quick start:"
-echo "  /security-audit src/signing/  — Audit signing module"
-echo "  /chain-add Solana             — Add new chain support"
-echo "  /implement EIP-4337 support   — Orchestrate multi-agent implementation"
-echo "  /pipeline [arch, types] → impl → [review, security] : Build fee module"
-echo "  /review                       — Review recent changes"
-echo "  /tdd fee estimation           — TDD workflow for feature"
-echo "  /idea DEX aggregator          — Product strategy brainstorm"
-echo ""
-echo "To enable disabled MCP servers, edit ~/.claude/settings.json"
-echo "  - alchemy: set ALCHEMY_API_KEY"
-echo "  - evm: set ETHERSCAN_API_KEY and PROVIDER_URL"
-echo "  - postgres: update connection string"
+echo "Keys are OPTIONAL — memory and tracing work without any:"
+echo "  OPENAI_API_KEY    — only for /cross-review and /debate"
+echo "  ETHERSCAN_API_KEY — only for EVM chains in /investigate (BTC/Solana need none)"
+echo "Restart Claude Code to pick up new MCP servers."

@@ -1,0 +1,9 @@
+[project]
+name = "harness-second-opinion"
+version = "0.1.0"
+description = "Cross-model review/debate MCP server (OpenAI-compatible APIs)"
+requires-python = ">=3.11"
+dependencies = [
+    "mcp>=2.0.0",
+    "httpx>=0.27",
+]

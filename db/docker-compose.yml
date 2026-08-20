@@ -1,0 +1,24 @@
+# Harness memory DB — Postgres 17 + pgvector.
+# Managed by install.sh; manual control:
+#   docker compose -f ~/claude-setup/db/docker-compose.yml up -d
+services:
+  harness-db:
+    image: pgvector/pgvector:pg17
+    container_name: harness-memory-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: harness
+      POSTGRES_PASSWORD: harness
+      POSTGRES_DB: harness_memory
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - harness_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U harness -d harness_memory"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  harness_pgdata:

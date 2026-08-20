@@ -1,0 +1,10 @@
+
+# Harness Memory Protocol
+<!-- harness-memory-protocol -->
+Persistent memory is always available via the `harness-memory` MCP (recall, remember, trace, case_*). Use it proactively, without waiting for /mem:
+- BEFORE starting work on chains, integrations, investigations, trading topics, or anything that may have history — call `recall` first, scoped: pass `project=` (repo name) and, when the question belongs to one work stream, `track=` (opensource | roadmap).
+- AFTER completing significant work — call `remember` with the decision/finding INCLUDING the why. Always fill what applies: `topic` (blockchain | trading | dev | investigation), `project` (repo name), `chain` (ethereum, solana, bitcoin, tron… — for ANY chain-specific fact; aliases like eth/sol/btc are normalized), `source` (docs URL, EIP, PR, tx hash — crypto facts go stale and provenance is how they get re-verified), and — for anything inside a git repo — `project` plus `branch` taken from git (`basename $(git rev-parse --show-toplevel)` and `git branch --show-current`). The `track` is derived from the branch (anything containing "opensource" → opensource, otherwise roadmap), which is what keeps parallel work streams on one repo from overwriting each other. Near-duplicates auto-supersede WITHIN a project+track+chain, so re-remember updated facts freely.
+- Chain-scoped questions ("что мы знаем про Solana", "как мы делаем комиссии в TRON") — pass `chain=` to `recall` instead of relying on wording; that filter is exact. Same for `project=` / `track=` when the user asks about one repo or one work stream.
+- Contradictions between tracks are expected, not errors: the same repo can legitimately build one way on the opensource branch and another on roadmap. Never "fix" one by overwriting the other — record both with their track.
+- Fund-tracing requests ("куда ушли средства", "trace this address") — follow the /investigate command methodology; persist entities/flows via harness-memory so cases resume in any future session.
+- Never store secrets, seeds, or private keys in memory. Public addresses and tx hashes are fine.
